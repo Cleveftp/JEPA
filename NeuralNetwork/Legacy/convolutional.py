@@ -100,8 +100,8 @@ class Reshape:
         return d_loss.reshape(self.shape)
         
 if __name__ == "__main__":
-    from NeuralNetwork.neural_network import Sequential, Layer
-    from NeuralNetwork.activations import ReLU, Sigmoid
+    from NeuralNetwork.Legacy.neural_network import Sequential, Layer
+    from NeuralNetwork.Legacy.activations import ReLU, Sigmoid
 
     model = Sequential(0.1)
 

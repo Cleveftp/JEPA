@@ -1,5 +1,5 @@
 import cupy as cp
-from NeuralNetwork.activations import Softmax
+from NeuralNetwork.Legacy.activations import Softmax
 
 class self_attn:
     def __init__(self, input_dim=128, head_dim=128, cuda_device=cp.cuda.Device(0)):

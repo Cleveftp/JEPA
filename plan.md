@@ -39,6 +39,12 @@ Realizations:
 5. Teacher EMA
 6. Profit
 
+## IT WORKS!!!!
 
+Some problems to address:
+1. It's slow
+2. It runs vanilla SGD
 
-IT WORKS!!!!
+Proposed solutions:
+1. Move to minibatching (done) - I'm going to run an instance with this just to see if it works
+2. Move to ADAM
