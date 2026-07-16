@@ -2,7 +2,7 @@ from NeuralNetwork.parameter import Parameter, Simple_Parameter
 from NeuralNetwork.neural_network import Layer, LayerNormalization
 from Transformer.transformer import Transformer
 from Transformer.Embedding import Embedding
-from util import mask_tiles, collate_masked_with_unmasked, update_teacher, block_mask_tiles
+from util import mask_tiles, collate_masked_with_unmasked, update_teacher
 from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm

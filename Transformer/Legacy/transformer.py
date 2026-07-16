@@ -1,6 +1,6 @@
 import cupy as cp
-from NeuralNetwork.neural_network import LayerNormalization, Layer
-from Transformer.multi_head_attn import multi_head_attention
+from NeuralNetwork.Legacy.neural_network import LayerNormalization, Layer
+from Transformer.Legacy.multi_head_attn import multi_head_attention
 
 class Transformer:
     def __init__(self, dim, n_heads=4):
