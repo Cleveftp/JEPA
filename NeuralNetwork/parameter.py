@@ -9,16 +9,23 @@ class Parameter:
 
         self.cuda_device = cuda_device
 
+        self.d_loss = cp.zeros_like(self.P)
+
     def forward(self, x, idx=None):
         # Allows me to have a fixed parameter table without dropping masked parameters
         return x + (self.P if idx is None else self.P[idx])
 
-    def backward(self, d_loss, lr, idx=None):
+    def backward(self, d_loss, idx=None):
         if idx is None:
-            self.P -= lr * d_loss
+            self.d_loss += d_loss
         else:
-            self.P[idx] -= lr * d_loss
+            self.d_loss[idx] += d_loss
         return d_loss
+    
+    def step(self, lr, n):
+        self.P -= lr * self.d_loss / n
+        self.d_loss = cp.zeros_like(self.P)
+        
     
 class Simple_Parameter:
     def __init__(self, dim, init=0.02, cuda_device=cp.cuda.Device(0)):
@@ -29,11 +36,16 @@ class Simple_Parameter:
 
         self.cuda_device = cuda_device
 
+        self.d_loss = cp.zeros_like(self.P)
+
     def forward(self):
-        # Simple aggregation
-        return self.P  
+        return self.P
     
-    def backward(self, d_loss, lr):
+    def backward(self, d_loss):
         # Parameter doesnt affect the global gradient (return d_loss)
-        self.P -=  d_loss * lr
+        self.d_loss += d_loss
         return d_loss
+    
+    def step(self, lr, n):
+        self.P -= lr * self.d_loss / n
+        self.d_loss = cp.zeros_like(self.P)

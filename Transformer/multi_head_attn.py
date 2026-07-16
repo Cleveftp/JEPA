@@ -7,6 +7,8 @@ class multi_head_attention:
         self.heads = [self_attn(input_dim=dim, head_dim=self.head_dim) for _ in range(n_heads)]
         self.wO = (cp.random.randn(n_heads*self.head_dim, dim) * cp.sqrt(2/dim)).astype(cp.float32)
 
+        self.dWO = cp.zeros_like(self.wO)
+
     def forward(self, x):
         # Run all inputs through all heads
         outs = [head.forward(x) for head in self.heads]
@@ -14,14 +16,22 @@ class multi_head_attention:
         self.x = x
         return cp.dot(self.concat, self.wO)
     
-    def backward(self, d_loss, lr):
+    def backward(self, d_loss):
         d_concat = cp.dot(d_loss,self.wO.T)
         dWO = cp.dot(self.concat.T, d_loss)
         dX = 0
 
         for i, head in enumerate(self.heads):
             chunk = d_concat[:, i*self.head_dim:(i+1)*self.head_dim] # Split
-            dX += head.backward(chunk, lr)
+            dX += head.backward(chunk)
 
-        self.wO -= lr * dWO
+        self.dWO += dWO
+
         return dX
+    
+    def step(self, lr, n):
+        self.wO -= lr * self.dWO / n
+        self.dWO = cp.zeros_like(self.wO)
+
+        for head in self.heads:
+            head.step(lr, n)

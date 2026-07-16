@@ -2,7 +2,7 @@ from NeuralNetwork.parameter import Parameter, Simple_Parameter
 from NeuralNetwork.neural_network import Layer, LayerNormalization
 from Transformer.transformer import Transformer
 from Transformer.Embedding import Embedding
-from util import mask_tiles, collate_masked_with_unmasked, update_teacher
+from util import mask_tiles, collate_masked_with_unmasked, update_teacher, block_mask_tiles
 from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
@@ -22,9 +22,9 @@ lr = 0.003
 epochs = 300
 token_dim = 64 # Token dimensions
 stack_dim = 16 # How many patches are there per image?
-ratio = 0.8 # What ratio of tokens aren't masked?
+ratio = 0.6 # What ratio of tokens aren't masked?
 masked_dim = int(stack_dim * ratio) # How many patches arent masked?
-EMA_ratio = 0.001 # How much does the student change the teacher?
+EMA_ratio = 5e-5 # How much does the student change the teacher?
 sample_portion = len(X_train) # How many samples are used?
 batch_size = 100
 
@@ -103,6 +103,9 @@ teacher_modules = (ffn1, ffn2, p1, trans1)
 student_modules = (ffn3, ffn4, p2, trans2)
 update_teacher(teacher_modules, student_modules, 1.0)
 
+# Save random model
+save_model(teacher_modules, f"./Checkpoints/teacher_e00.npz")
+
 # Track data
 metrics_array = {
     "epoch":[],
@@ -120,8 +123,7 @@ for epoch in range(epochs):
     running_teacher_val = 0.0
 
     # TRAINING LOOP
-    batch_idx = cp.random.choice(len(X_train[:sample_portion]), batch_size, replace=False)
-    for sample in tqdm(X_train[batch_idx]):
+    for sample in tqdm(X_train[:sample_portion]):
         # Get tiles for sample
         tiles = embedding_space._tile(sample[0])
         tiles = tiles.reshape(tiles.shape[0], -1) # Flatten regions
@@ -170,18 +172,18 @@ for epoch in range(epochs):
         running_teacher_val += float(cp.mean(cp.abs(t_out)))
 
     # Verbose and tracker
-    print(f"epoch {epoch}  loss {running_MSE / len(batch_idx):.5f}    teach {running_teacher / len(batch_idx):.5f}    ",
+    print(f"epoch {epoch}  loss {running_MSE / sample_portion:.5f}    teach {running_teacher / sample_portion:.5f}    ",
           f"val_loss {running_MSE_val / len(X_test):.5f}    val_teach {running_teacher_val / len(X_test):.5f}")
     
     metrics_array["epoch"].append(epoch)
-    metrics_array["mse"].append(running_MSE / len(batch_idx))
-    metrics_array["teach"].append(running_teacher / len(batch_idx))
+    metrics_array["mse"].append(running_MSE / sample_portion)
+    metrics_array["teach"].append(running_teacher / sample_portion)
     metrics_array["mse_val"].append(running_MSE_val / len(X_test))
     metrics_array["teach_val"].append(running_teacher_val / len(X_test))
 
     # Checkpointing
     if (epoch+1) % 10 == 0:
-        save_model(teacher_modules, f"./Checkpoints/teacher_e{epoch}.npz")
+        save_model(teacher_modules, f"./Checkpoints/teacher_e{epoch+1}.npz")
 
 # Save run metrics
 import json

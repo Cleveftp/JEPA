@@ -6,6 +6,18 @@ def mask_tiles(tiles, ratio=0.8):
     masked_idx  = cp.setdiff1d(cp.arange(n), visible_idx)   # Cool function to select everything not chosen in a 1D array!
     return tiles[visible_idx], visible_idx, masked_idx
 
+def block_mask_tiles(tiles, grid=(4, 4), block=(2, 2)):
+    # mask blocks instead of random
+    gh, gw = grid
+    bh, bw = block
+    r0 = int(cp.random.randint(0, gh - bh + 1))   # random top-left, block stays in-bounds
+    c0 = int(cp.random.randint(0, gw - bw + 1))
+    rows = cp.arange(r0, r0 + bh)
+    cols = cp.arange(c0, c0 + bw)
+    masked_idx  = cp.sort((rows[:, None] * gw + cols[None, :]).ravel())  # flat grid indices
+    visible_idx = cp.setdiff1d(cp.arange(gh * gw), masked_idx)
+    return tiles[visible_idx], visible_idx, masked_idx
+
 def update_teacher(teacher_modules, student_modules, beta=0.01):
     def _ema(t_arr, s_arr, beta):
         # teacher drifts toward student and away from teacher

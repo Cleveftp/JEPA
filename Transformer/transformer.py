@@ -19,16 +19,24 @@ class Transformer:
         o = x + self.ffn2.forward(self.ffn1.forward(b))
         return o
     
-    def backward(self, d_loss, lr):
+    def backward(self, d_loss):
         # First loss
-        d_ffn2 = self.ffn2.backward(d_loss, lr)
-        d_ffn1 = self.ffn1.backward(d_ffn2, lr)
-        d_ln2 = self.ln2.backward(d_ffn1, lr)
+        d_ffn2 = self.ffn2.backward(d_loss)
+        d_ffn1 = self.ffn1.backward(d_ffn2)
+        d_ln2 = self.ln2.backward(d_ffn1)
         d_loss = d_loss + d_ln2
 
         # First loss
-        d_mha = self.mha.backward(d_loss, lr)
-        d_ln1 = self.ln1.backward(d_mha, lr)
+        d_mha = self.mha.backward(d_loss)
+        d_ln1 = self.ln1.backward(d_mha)
         d_loss = d_loss + d_ln1
         return d_loss
+    
+    def step(self, lr, n):
+        self.ln1.step(lr, n)
+        self.ln2.step(lr, n)
+        self.mha.step(lr, n)
+        self.ffn1.step(lr, n)
+        self.ffn2.step(lr, n)
+
 

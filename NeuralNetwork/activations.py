@@ -9,9 +9,12 @@ class ReLU:
             self.input = x
             return cp.maximum(0,x)
     
-    def backward(self, d_loss, _):
+    def backward(self, d_loss):
         with self.cuda_device:
             return d_loss * (self.input > 0)
+        
+    def step(self, lr=None, n=None):
+        pass
     
 class Sigmoid:
     def __init__(self, cuda_device=cp.cuda.Device(0)):
@@ -22,10 +25,13 @@ class Sigmoid:
             self.input = x
             return 1 / (1 + cp.exp(-x))
     
-    def backward(self, d_loss, _):
+    def backward(self, d_loss):
         with self.cuda_device:
             s = 1 / (1 + cp.exp(-self.input))
             return d_loss * s * (1 - s)
+        
+    def step(self, lr=None, n=None):
+        pass
         
 class Softmax:
     def __init__(self, cuda_device=cp.cuda.Device(0)):
@@ -39,7 +45,10 @@ class Softmax:
             self.A = exp / cp.sum(exp, axis=-1, keepdims=True)
             return self.A
     
-    def backward(self, d_loss, _):
+    def backward(self, d_loss):
         with self.cuda_device:
             dot = cp.sum(d_loss * self.A, axis=-1, keepdims=True)
             return self.A * (d_loss - dot)
+        
+    def step(self, lr=None, n=None):
+        pass

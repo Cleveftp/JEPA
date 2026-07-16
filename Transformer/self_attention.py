@@ -14,6 +14,10 @@ class self_attn:
 
         self.softmax = Softmax()
 
+        self.dWQ = cp.zeros_like(self.wQ)
+        self.dWK = cp.zeros_like(self.wK)
+        self.dWV = cp.zeros_like(self.wV)
+
     def forward(self, x):
         self.x = x
         self.Q = cp.dot(x, self.wQ)
@@ -27,7 +31,7 @@ class self_attn:
         self.O = cp.dot(self.A, self.V)
         return self.O
     
-    def backward(self, d_loss, lr):
+    def backward(self, d_loss):
         dV = cp.dot(self.A.T, d_loss)
         dA = cp.dot(d_loss, self.V.T)
 
@@ -41,11 +45,19 @@ class self_attn:
 
         dX = cp.dot(dQ, self.wQ.T) + cp.dot(dK, self.wK.T) + cp.dot(dV, self.wV.T)
 
-        self.wQ -= lr * dWQ
-        self.wK -= lr * dWK
-        self.wV -= lr * dWV
+        self.dWQ += dWQ
+        self.dWK += dWK
+        self.dWV += dWV
 
         return dX
+    
+    def step(self, lr, n):
+        self.wQ -= lr * self.dWQ / n
+        self.wK -= lr * self.dWK / n
+        self.wV -= lr * self.dWV / n
+        self.dWQ = cp.zeros_like(self.wQ)
+        self.dWK = cp.zeros_like(self.wK)
+        self.dWV = cp.zeros_like(self.wV)
 
 if __name__ == "__main__":
     input_tokens = cp.random.randn(5, 16)
