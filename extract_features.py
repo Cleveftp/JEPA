@@ -17,7 +17,7 @@ ffn2 = Layer(32, token_dim, 'linear')
 p1 = Parameter((stack_dim, token_dim)) 
 trans1 = Transformer(token_dim)
 ln1 = LayerNormalization()
-load_model((ffn1, ffn2, p1, trans1), "./Checkpoints/teacher_e100.npz")
+load_model((ffn1, ffn2, p1, trans1), "./Checkpoints/teacher_e300.npz")
 
 def forward(tiles):
     ffn = ffn1.forward(tiles)

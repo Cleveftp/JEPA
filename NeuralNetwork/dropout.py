@@ -11,5 +11,8 @@ class Dropout:
             x[mask] = 0
             return x
     
-    def backward(self, d_loss, _):
+    def backward(self, d_loss):
         return d_loss
+    
+    def step(self, lr=None, n=None):
+        pass

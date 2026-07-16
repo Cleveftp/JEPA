@@ -1,6 +1,6 @@
 import cupy as cp
 
-class Layer:
+class Layer: # Can handle batches
     def __init__(self, input_size, output_size, activation='relu', cuda_device=cp.cuda.Device(0)):
         """Needs weights, bias, store input, store forward pass output, activation layer"""
         with cuda_device:
@@ -10,6 +10,10 @@ class Layer:
         # CUDA SUPPORT
         self.activation = activation.lower()
         self.cuda_device = cuda_device
+
+        # For cumulative gradient
+        self.dW = cp.zeros_like(self.W)
+        self.dB = cp.zeros_like(self.B)
 
     def _activate(self, x):
         if self.activation == 'sigmoid':
@@ -40,27 +44,28 @@ class Layer:
             self.out = cp.dot(x, self.W.T) + self.B
         return self._activate(self.out)
 
-    def backward(self, d_loss, lr):
+    def backward(self, d_loss):
         # dL/dw = dL/dz * dz/dx * dx/dw
         with self.cuda_device:
             dL_dz = d_loss * self._d_activate(self.out)
 
             if self.input.ndim == 1:
-                dW = cp.outer(dL_dz, self.input)
-                dB = dL_dz
+                self.dW += cp.outer(dL_dz, self.input)
+                self.dB += dL_dz
             else:
-                dW = dL_dz.T @ self.input
-                dB = dL_dz.sum(axis=0)
+                self.dW += cp.dot(dL_dz.T, self.input)
+                self.dB += dL_dz.sum(axis=0)
             
             # Gradients for next layer
             d_input = cp.dot(dL_dz, self.W)
 
-            # Weight update w_n = w_o - lr*dL/dw
-            # Weight and Bias update
-            self.W -= lr * dW
-            self.B -= lr * dB
-
             return d_input
+        
+    def step(self, lr, n): # Averaged step based on broader context (batch size)
+        self.W -= lr * self.dW / n
+        self.B -= lr * self.dB / n
+        self.dW = cp.zeros_like(self.W)
+        self.dB = cp.zeros_like(self.B)
         
 class Sequential:
     def __init__(self, lr):
@@ -82,7 +87,11 @@ class Sequential:
         # Backpropagate from loss
         grad = d_loss
         for layer in reversed(self.layers):
-            grad = layer.backward(grad, self.lr)
+            grad = layer.backward(grad)
+
+    def step(self, n):
+        for layer in self.layers:
+            layer.step(self.lr, n)
 
 class LayerNormalization:
     def __init__(self, epsilon=1e-5):
@@ -94,34 +103,53 @@ class LayerNormalization:
         self.x_hat = (x - self.mean) / cp.sqrt(self.var + self.eps)
         return self.x_hat
 
-    def backward(self, d_loss, _):
+    def backward(self, d_loss):
         # Normalization gradient tracking
         N = d_loss.shape[-1]
         dx = (N * d_loss - cp.sum(d_loss, axis=-1, keepdims=True) - self.x_hat * cp.sum(d_loss * self.x_hat, axis=-1, keepdims=True)) / (N * cp.sqrt(self.var + self.eps))
         return dx
+    
+    def step(self, lr=None, n=None):
+        pass
 
 
 if __name__ == "__main__":
-    model = Sequential(lr=0.01)
+    cp.random.seed(42)
+
+    BATCH_SIZE = 10
+    LR = 0.1
+    EPOCHS = 200
+
+    model = Sequential(lr=LR)
     model.add_layers([
         Layer(10, 64, activation='sigmoid'),
         Layer(64, 128, activation='sigmoid'),
         Layer(128, 5, activation='sigmoid')
     ])
 
-    target = cp.random.rand(5)
-    inputs = cp.random.randn(10)
+    target = cp.random.rand(200,5)
+    inputs = cp.random.randn(200,10)
 
     def mse(y, y_):
-        loss = cp.mean(cp.square(y_ - y), dtype=cp.float16)
-        grad = -2 * (y_ - y) / y.size 
+        loss = cp.mean(cp.square(y_ - y))
+        grad = -2 * (y_ - y) / y.shape[1]
         return loss, grad
     
-    for i in range(10000):
-        pred = model.forward(inputs)
-        loss, d_loss = mse(pred, target)
+    def get_batches(arr, targ, batch_size, axis=0):
+        n_chunks = -(-arr.shape[axis] // batch_size)
+        return cp.array_split(arr, n_chunks, axis=axis), cp.array_split(targ, n_chunks, axis=axis)
+    
+    for e in range(EPOCHS):
+        cum_loss = 0.0
+        batches, batch_targets = get_batches(inputs, target, BATCH_SIZE)
+        for batch, targ in zip(batches, batch_targets):
+            pred = model.forward(batch)
+            loss, d_loss = mse(pred, targ)
+            cum_loss += loss
+            model.backward(d_loss)
+            model.step(BATCH_SIZE)
 
-        if i % 100 == 0:
-            print(f"Epoch {i}: {cp.average(loss)}")
-        model.backward(d_loss)
+        print(f"Epoch {e}: {cp.average(cum_loss)}")
+        
+        
     

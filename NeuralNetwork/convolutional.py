@@ -18,6 +18,10 @@ class Conv_2D:
         self.in_channels = in_channels
         self.out_channels = out_channels
 
+        # Buffers
+        self.d_kernel = cp.zeros_like(self.kernel)
+        self.d_bias = cp.zeros_like(self.bias)
+
     def forward(self, x):
         with self.cuda_device:
             # channels, height, width dont pad channels
@@ -45,7 +49,7 @@ class Conv_2D:
 
         return cp.transpose(out, (2, 0, 1))
     
-    def backward(self, d_loss, lr):
+    def backward(self, d_loss):
         # Start with the gradient update based on weights
         with self.cuda_device:
             # The kernel size
@@ -72,10 +76,16 @@ class Conv_2D:
             d_input = cp.transpose(d_x_pad, (2, 0, 1))[:, 1:-1, 1:-1]
 
             # Update kernel w and b
-            self.kernel -= lr * dW
-            self.bias -= lr * dB
+            self.d_kernel += dW
+            self.d_bias += dB
 
         return d_input
+    
+    def step(self, lr, n): # Averaged step based on broader context (batch size)
+        self.kernel -= lr * self.d_kernel / n
+        self.bias -= lr * self.d_bias / n
+        self.d_kernel = cp.zeros_like(self.kernel)
+        self.d_bias = cp.zeros_like(self.bias)
 
 class Flatten:
     def __init__(self):
@@ -88,6 +98,9 @@ class Flatten:
     def backward(self, d_loss, _):
         return d_loss.reshape(self.shape)
     
+    def step(self, lr=None, n=None):
+        pass
+    
 class Reshape:
     def __init__(self):
         pass
@@ -98,6 +111,9 @@ class Reshape:
     
     def backward(self, d_loss, _):
         return d_loss.reshape(self.shape)
+    
+    def step(self, lr=None, n=None):
+        pass
         
 if __name__ == "__main__":
     from NeuralNetwork.neural_network import Sequential, Layer
