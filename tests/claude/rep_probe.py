@@ -10,10 +10,9 @@ import os
 BASE = os.path.dirname(os.path.abspath(__file__))          # tests/claude (my folder)
 ROOT = os.path.abspath(os.path.join(BASE, "..", ".."))     # JEPA project root
 
-tr = np.load(os.path.join(ROOT, "train_reps.npy"))   # (N,16,64)
-te = np.load(os.path.join(ROOT, "test_reps.npy"))
+tr = np.load(os.path.join(ROOT, "features.npy"))   # (N,16,64)
 N = tr.shape[0]
-print(f"train {tr.shape}  test {te.shape}")
+print(f"train {tr.shape}")
 
 # --- image-level rep = mean over patches ---
 img = tr.mean(axis=1)            # (N,64)

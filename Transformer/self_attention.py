@@ -18,36 +18,38 @@ class self_attn:
         self.dWK = cp.zeros_like(self.wK)
         self.dWV = cp.zeros_like(self.wV)
 
+    # All of the below requires einsum which is just quick matrix calculations
+
     def forward(self, x):
         self.x = x
         self.Q = cp.dot(x, self.wQ)
         self.K = cp.dot(x, self.wK)
         self.V = cp.dot(x, self.wV)
 
-        self.S = cp.dot(self.Q, self.K.T) / cp.sqrt(self.head_dim)
+        self.S = cp.einsum('btk,bsk->bts', self.Q, self.K) / cp.sqrt(self.head_dim)
 
         self.A = self.softmax.forward(self.S)
 
-        self.O = cp.dot(self.A, self.V)
+        self.O = cp.einsum('bts,bsk->btk', self.A, self.V)
         return self.O
     
     def backward(self, d_loss):
-        dV = cp.dot(self.A.T, d_loss)
-        dA = cp.dot(d_loss, self.V.T)
+        dV = cp.einsum('bts,btk->bsk', self.A, d_loss)
+        dA = cp.einsum('btk,bsk->bts', d_loss, self.V)
 
-        dS = self.softmax.backward(dA, None) / cp.sqrt(self.head_dim)
-        dQ = cp.dot(dS, self.K)
-        dK = cp.dot(dS.T, self.Q)
+        dS = self.softmax.backward(dA) / cp.sqrt(self.head_dim)
+        dQ = cp.einsum('bts,bsk->btk', dS, self.K)
+        dK = cp.einsum('bts,btk->bsk', dS, self.Q)
 
-        dWQ = cp.dot(self.x.T, dQ)
-        dWK = cp.dot(self.x.T, dK)
-        dWV = cp.dot(self.x.T, dV)
-
-        dX = cp.dot(dQ, self.wQ.T) + cp.dot(dK, self.wK.T) + cp.dot(dV, self.wV.T)
+        dWQ = cp.einsum('btd,btk->dk', self.x, dQ)
+        dWK = cp.einsum('btd,btk->dk', self.x, dK)
+        dWV = cp.einsum('btd,btk->dk', self.x, dV)
 
         self.dWQ += dWQ
         self.dWK += dWK
         self.dWV += dWV
+
+        dX = cp.dot(dQ, self.wQ.T) + cp.dot(dK, self.wK.T) + cp.dot(dV, self.wV.T)
 
         return dX
     

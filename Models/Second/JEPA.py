@@ -2,7 +2,7 @@ from NeuralNetwork.parameter import Parameter, Simple_Parameter
 from NeuralNetwork.neural_network import Layer, LayerNormalization
 from Transformer.transformer import Transformer
 from Transformer.Embedding import Embedding
-from util import mask_tiles, collate_masked_with_unmasked, update_teacher, block_mask_tiles
+from util import mask_tiles, collate_masked_with_unmasked, update_teacher
 from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
@@ -22,11 +22,10 @@ lr = 0.003
 epochs = 300
 token_dim = 64 # Token dimensions
 stack_dim = 16 # How many patches are there per image?
-ratio = 0.6 # What ratio of tokens aren't masked?
+ratio = 0.8 # What ratio of tokens aren't masked?
 masked_dim = int(stack_dim * ratio) # How many patches arent masked?
 EMA_ratio = 5e-5 # How much does the student change the teacher?
 sample_portion = len(X_train) # How many samples are used?
-batch_size = 100
 
 # EMBEDDING
 # For now just to get tiling
@@ -103,9 +102,6 @@ teacher_modules = (ffn1, ffn2, p1, trans1)
 student_modules = (ffn3, ffn4, p2, trans2)
 update_teacher(teacher_modules, student_modules, 1.0)
 
-# Save random model
-save_model(teacher_modules, f"./Checkpoints/teacher_e00.npz")
-
 # Track data
 metrics_array = {
     "epoch":[],
@@ -117,4 +113,79 @@ metrics_array = {
 
 for epoch in range(epochs):
     running_MSE = 0.0
-    running
+    running_teacher = 0.0
+
+    running_MSE_val = 0.0
+    running_teacher_val = 0.0
+
+    # TRAINING LOOP
+    for sample in tqdm(X_train[:sample_portion]):
+        # Get tiles for sample
+        tiles = embedding_space._tile(sample[0])
+        tiles = tiles.reshape(tiles.shape[0], -1) # Flatten regions
+        unmasked_tiles, visible_idx, masked_idx = mask_tiles(tiles) # Mask tiles
+
+        # forward pass
+        t_out = t_forward(tiles)
+        s_out = s_forward(unmasked_tiles, visible_idx)
+        p_out = p_forward(s_out, visible_idx, masked_idx)
+
+        # Loss
+        diff = p_out[masked_idx] - t_out[masked_idx]
+        running_MSE += float(cp.mean(diff ** 2)) 
+        running_teacher += float(cp.mean(cp.abs(t_out)))
+        d_full = cp.zeros((stack_dim, token_dim), cp.float32) # zero gradient base so I can only pass gradients through masked tokens
+        d_full[masked_idx] = 2 * diff / token_dim
+
+        # backward pass
+        # Predictor backward
+        d_full = pred_ln.backward(d_full, None)
+        d_seq = trans3.backward(d_full, lr)
+        d_seq = p3.backward(d_seq, lr)
+        masked_p.backward(d_seq[masked_idx].sum(axis=0), lr) # ONLY THE SUM OF THE MASKED TOKEN GRADIENTS
+
+        # Student backward
+        out = s_backward(d_seq[visible_idx], lr, visible_idx) # ONLY THE NON MASKED TOKEN GRADIENTS
+
+        # Teacher EMA
+        update_teacher(teacher_modules, student_modules, EMA_ratio)
+
+    # VALIDATION LOOP
+    for sample in X_test:
+        # Get tiles for sample
+        tiles = embedding_space._tile(sample[0])
+        tiles = tiles.reshape(tiles.shape[0], -1) # Flatten regions
+        unmasked_tiles, visible_idx, masked_idx = mask_tiles(tiles) # Mask tiles
+
+        # forward pass
+        t_out = t_forward(tiles)
+        s_out = s_forward(unmasked_tiles, visible_idx)
+        p_out = p_forward(s_out, visible_idx, masked_idx)
+
+        # Loss
+        diff = p_out[masked_idx] - t_out[masked_idx]
+        running_MSE_val += float(cp.mean(diff ** 2)) 
+        running_teacher_val += float(cp.mean(cp.abs(t_out)))
+
+    # Verbose and tracker
+    print(f"epoch {epoch}  loss {running_MSE / len(X_train[:sample_portion]):.5f}    teach {running_teacher / len(X_train[:sample_portion]):.5f}    ",
+          f"val_loss {running_MSE_val / len(X_test):.5f}    val_teach {running_teacher_val / len(X_test):.5f}")
+    
+    metrics_array["epoch"].append(epoch)
+    metrics_array["mse"].append(running_MSE / len(X_train[:sample_portion]))
+    metrics_array["teach"].append(running_teacher / len(X_train[:sample_portion]))
+    metrics_array["mse_val"].append(running_MSE_val / len(X_test))
+    metrics_array["teach_val"].append(running_teacher_val / len(X_test))
+
+    # Checkpointing
+    if epoch+1 % 10 == 0:
+        save_model(teacher_modules, f"./Checkpoints/teacher_e{epoch}.npz")
+
+# Save run metrics
+import json
+
+with open("output.json", "w") as file:
+    json.dump(metrics_array, file)
+
+# Save teacher
+save_model(teacher_modules, "teacher.npz")
