@@ -19,7 +19,7 @@ print(f"Testing set full length: {len(X_test)}")
 
 # HYPERPARAMETERS
 lr = 0.003
-epochs = 300
+epochs = 100
 token_dim = 64 # Token dimensions
 stack_dim = 16 # How many patches are there per image?
 ratio = 0.8 # What ratio of tokens aren't masked?

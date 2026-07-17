@@ -12,20 +12,17 @@ class multi_head_attention:
     def forward(self, x):
         # Run all inputs through all heads
         outs = [head.forward(x) for head in self.heads]
-        self.concat = cp.concatenate(outs, axis=1)
-        self.x = x
+        self.concat = cp.concatenate(outs, axis=-1)
         return cp.dot(self.concat, self.wO)
     
     def backward(self, d_loss):
-        d_concat = cp.dot(d_loss,self.wO.T)
-        dWO = cp.dot(self.concat.T, d_loss)
+        d_concat = cp.dot(d_loss, self.wO.T)
+        self.dWO += cp.einsum('btd,bte->de', self.concat, d_loss)
+
         dX = 0
-
-        for i, head in enumerate(self.heads):
-            chunk = d_concat[:, i*self.head_dim:(i+1)*self.head_dim] # Split
-            dX += head.backward(chunk)
-
-        self.dWO += dWO
+        for i, h in enumerate(self.heads):
+            chunk = d_concat[..., i*self.head_dim:(i+1)*self.head_dim]
+            dX = dX + h.backward(chunk)
 
         return dX
     

@@ -48,19 +48,12 @@ class Layer: # Can handle batches
         # dL/dw = dL/dz * dz/dx * dx/dw
         with self.cuda_device:
             dL_dz = d_loss * self._d_activate(self.out)
+            x2 = self.input.reshape(-1, self.input.shape[-1]) # Reshape along batch
+            g2 = dL_dz.reshape(-1, dL_dz.shape[-1]) # Reshape output
+            self.dW += cp.dot(g2.T, x2) 
+            self.dB += g2.sum(0) 
+            return cp.dot(dL_dz, self.W)
 
-            if self.input.ndim == 1:
-                self.dW += cp.outer(dL_dz, self.input)
-                self.dB += dL_dz
-            else:
-                self.dW += cp.dot(dL_dz.T, self.input)
-                self.dB += dL_dz.sum(axis=0)
-            
-            # Gradients for next layer
-            d_input = cp.dot(dL_dz, self.W)
-
-            return d_input
-        
     def step(self, lr, n): # Averaged step based on broader context (batch size)
         self.W -= lr * self.dW / n
         self.B -= lr * self.dB / n
